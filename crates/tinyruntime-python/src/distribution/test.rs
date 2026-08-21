@@ -81,7 +81,10 @@ fn an_exclusive_ceiling_keeps_selection_off_a_pre_release_series() {
     assert_eq!(bounded.version, "3.13.1");
 
     let unbounded = select_from(&release(), "3.12", None, LINUX).unwrap();
-    assert_eq!(unbounded.version, "3.15.0", "the ceiling was doing the work");
+    assert_eq!(
+        unbounded.version, "3.15.0",
+        "the ceiling was doing the work"
+    );
 }
 
 #[test]
@@ -89,7 +92,11 @@ fn builds_for_another_host_are_not_considered() {
     // The darwin asset in the fixture is a newer-or-equal version; matching it
     // would install an interpreter that cannot run on this machine.
     let chosen = select_from(&release(), "3.12", Some("3.15"), LINUX).unwrap();
-    assert!(!chosen.archive_name.contains("darwin"), "chose {}", chosen.archive_name);
+    assert!(
+        !chosen.archive_name.contains("darwin"),
+        "chose {}",
+        chosen.archive_name
+    );
 }
 
 #[test]
@@ -120,7 +127,10 @@ fn a_floor_nothing_reaches_is_a_distinct_failure_from_an_unreadable_index() {
         panic!("got {error:?}");
     };
     assert_eq!(release, "20240909");
-    assert!(bounds.contains("3.99"), "the bounds that excluded everything are named");
+    assert!(
+        bounds.contains("3.99"),
+        "the bounds that excluded everything are named"
+    );
 }
 
 #[test]
@@ -128,13 +138,19 @@ fn a_bound_that_is_not_a_version_is_refused_by_name() {
     let error = select_from(&release(), "latest", None, LINUX).expect_err("refused");
     assert!(matches!(
         error,
-        Error::InvalidVersion { bound: "minimum", .. }
+        Error::InvalidVersion {
+            bound: "minimum",
+            ..
+        }
     ));
 
     let error = select_from(&release(), "3.12", Some("nonsense"), LINUX).expect_err("refused");
     assert!(matches!(
         error,
-        Error::InvalidVersion { bound: "maximum", .. }
+        Error::InvalidVersion {
+            bound: "maximum",
+            ..
+        }
     ));
 }
 
@@ -159,10 +175,22 @@ fn a_release_with_no_digest_still_selects() {
 fn every_platform_the_channel_publishes_for_is_in_the_table() {
     for (os, arch, expected) in [
         ("linux", "x86_64", LINUX),
-        ("linux", "aarch64", "aarch64-unknown-linux-gnu-install_only.tar.gz"),
-        ("macos", "aarch64", "aarch64-apple-darwin-install_only.tar.gz"),
+        (
+            "linux",
+            "aarch64",
+            "aarch64-unknown-linux-gnu-install_only.tar.gz",
+        ),
+        (
+            "macos",
+            "aarch64",
+            "aarch64-apple-darwin-install_only.tar.gz",
+        ),
         ("macos", "x86_64", "x86_64-apple-darwin-install_only.tar.gz"),
-        ("windows", "x86_64", "x86_64-pc-windows-msvc-install_only.tar.gz"),
+        (
+            "windows",
+            "x86_64",
+            "x86_64-pc-windows-msvc-install_only.tar.gz",
+        ),
     ] {
         assert_eq!(
             suffix_for(os, arch).unwrap_or_else(|_| panic!("{os}/{arch} is missing")),
@@ -179,5 +207,9 @@ fn a_host_the_channel_does_not_publish_for_is_refused_by_name() {
 
 #[test]
 fn this_machine_is_one_the_channel_publishes_for() {
-    assert!(host_suffix().is_ok(), "no build for {}", std::env::consts::ARCH);
+    assert!(
+        host_suffix().is_ok(),
+        "no build for {}",
+        std::env::consts::ARCH
+    );
 }

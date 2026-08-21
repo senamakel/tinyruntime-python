@@ -30,7 +30,11 @@ fn a_release_candidate_parses_as_its_series() {
 #[test]
 fn something_that_is_not_a_version_does_not_parse() {
     assert_eq!(parse_version("latest"), None);
-    assert_eq!(parse_version("3"), None, "a bare major is not a python version");
+    assert_eq!(
+        parse_version("3"),
+        None,
+        "a bare major is not a python version"
+    );
     assert_eq!(parse_version(""), None);
 }
 
@@ -45,7 +49,10 @@ fn versions_order_by_component_rather_than_lexically() {
 #[test]
 fn a_request_names_a_floor_rather_than_an_exact_version() {
     assert!(satisfies(version("3.12.4"), "3.12", None));
-    assert!(satisfies(version("3.13.1"), "3.12", None), "newer satisfies a floor");
+    assert!(
+        satisfies(version("3.13.1"), "3.12", None),
+        "newer satisfies a floor"
+    );
     assert!(!satisfies(version("3.11.9"), "3.12", None));
 }
 

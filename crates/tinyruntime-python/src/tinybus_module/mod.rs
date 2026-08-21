@@ -41,8 +41,7 @@ struct PythonProvider {
 impl PythonProvider {
     /// What this provider is and what it targets by default.
     async fn describe(&self) -> TinyBusResult<ProviderDescriptor> {
-        let mut descriptor =
-            ProviderDescriptor::new(Language::python(), "Python", DEFAULT_VERSION);
+        let mut descriptor = ProviderDescriptor::new(Language::python(), "Python", DEFAULT_VERSION);
         for tool in layout::TOOLS {
             descriptor = descriptor.with_executable(*tool);
         }
@@ -57,10 +56,7 @@ impl PythonProvider {
     }
 
     /// Pick the standalone build to install.
-    async fn select_distribution(
-        &self,
-        settings: RuntimeSettings,
-    ) -> TinyBusResult<Distribution> {
+    async fn select_distribution(&self, settings: RuntimeSettings) -> TinyBusResult<Distribution> {
         distribution::select(&self.client, &settings)
             .await
             .map_err(|error| tinybus::Error::failed(error.to_string()))

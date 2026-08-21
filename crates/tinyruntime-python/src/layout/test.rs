@@ -28,7 +28,11 @@ fn the_interpreter_is_found_inside_the_channels_python_directory() {
     fabricate(scratch.path(), &["python3"]);
 
     let found = find_interpreter(scratch.path()).expect("the interpreter is there");
-    assert!(found.ends_with("python/bin/python3"), "found {}", found.display());
+    assert!(
+        found.ends_with("python/bin/python3"),
+        "found {}",
+        found.display()
+    );
 }
 
 #[cfg(unix)]

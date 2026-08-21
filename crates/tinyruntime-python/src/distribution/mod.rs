@@ -1,7 +1,7 @@
 //! Choosing which standalone Python build to install.
 //!
 //! The channel is `astral-sh/python-build-standalone`, which publishes a set of
-//! relocatable CPython builds per release rather than one archive per version.
+//! relocatable `CPython` builds per release rather than one archive per version.
 //! Two consequences shape this module.
 //!
 //! First, selection is a search rather than a lookup: the index has to be read,
@@ -27,7 +27,8 @@ pub use host::{host_suffix, suffix_for};
 pub use index::{Asset, Release, select as select_from};
 
 /// Where the standalone Python builds are published.
-const RELEASES_API: &str = "https://api.github.com/repos/astral-sh/python-build-standalone/releases";
+const RELEASES_API: &str =
+    "https://api.github.com/repos/astral-sh/python-build-standalone/releases";
 
 /// Pick the build to install for this host under `settings`.
 ///

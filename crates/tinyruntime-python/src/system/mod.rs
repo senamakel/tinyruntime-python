@@ -17,8 +17,8 @@ use std::time::Duration;
 
 use tinyruntime_bus::{RuntimeLayout, RuntimeSettings};
 
-use crate::version::{self, Version};
 use crate::layout;
+use crate::version::{self, Version};
 
 /// How long a `--version` probe may take before it is abandoned.
 ///
@@ -158,7 +158,11 @@ pub async fn probe_version(binary: &Path) -> Option<String> {
     } else {
         stdout
     };
-    if reported.is_empty() { None } else { Some(reported) }
+    if reported.is_empty() {
+        None
+    } else {
+        Some(reported)
+    }
 }
 
 /// Suppress the console window Windows would flash for each probe.

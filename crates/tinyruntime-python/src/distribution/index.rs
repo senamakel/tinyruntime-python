@@ -160,10 +160,8 @@ fn candidate(asset: &Asset, suffix: &str) -> Option<Candidate> {
 /// same triple, and both are usable.
 fn matches_host(asset_name: &str, suffix: &str) -> bool {
     asset_name.ends_with(suffix)
-        || asset_name.ends_with(&suffix.replace(
-            "-install_only.tar.gz",
-            "-install_only_stripped.tar.gz",
-        ))
+        || asset_name
+            .ends_with(&suffix.replace("-install_only.tar.gz", "-install_only_stripped.tar.gz"))
 }
 
 /// The directory name a build installs into, derived from its asset name.

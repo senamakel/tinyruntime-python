@@ -4,19 +4,19 @@
 //!
 //! ```text
 //! cargo run --example verify_github_release -- \
-//!   https://github.com/tinyhumansai/template/releases/tag/v0.1.4 \
-//!   template-0.1.4-ubuntu-24.04-x86_64.tar.gz \
+//!   https://github.com/tinyhumansai/tinyruntime-python/releases/tag/v0.1.4 \
+//!   tinyruntime-python-0.1.4-ubuntu-24.04-x86_64.tar.gz \
 //!   <sha256>
 //! ```
 
 use std::io;
 use std::time::Duration;
 
-use template::{GreetRequest, GreetResponse, names};
 use tinybus::Connection;
 use tinybus::broker::Broker;
 use tinybus::module::ModuleHost;
 use tinybus::transport::memory::MemoryBus;
+use tinyruntime_python::{ProviderDescriptor, names};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -45,7 +45,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tokio::time::timeout(Duration::from_secs(5), async {
         loop {
             let claimed = client.list_names().await?;
-            if claimed.iter().any(|name| name.as_str() == names::INTERFACE) {
+            if claimed
+                .iter()
+                .any(|name| name.as_str() == names::providers::PYTHON)
+            {
                 return tinybus::Result::Ok(());
             }
             tokio::task::yield_now().await;
@@ -53,21 +56,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     })
     .await??;
 
-    let proxy = client.proxy(names::INTERFACE, names::OBJECT_PATH, names::INTERFACE)?;
-    let reply: GreetResponse = proxy
-        .call(names::methods::GREET, (GreetRequest::new("TinyBus"),))
-        .await?;
-    if reply.greeting != "Hello, TinyBus!" {
+    // `Describe` is the right probe for a provider: it exercises the whole
+    // dispatch path and needs neither a network nor an installed interpreter, so
+    // it verifies the artifact rather than the machine it happens to run on.
+    let proxy = client.proxy(
+        names::providers::PYTHON,
+        names::PROVIDER_OBJECT_PATH,
+        names::PROVIDER_INTERFACE,
+    )?;
+    let descriptor: ProviderDescriptor = proxy.call(names::provider_methods::DESCRIBE, ()).await?;
+    if descriptor.language.as_str() != tinyruntime_python::PYTHON {
         return Err(io::Error::other(format!(
-            "module returned an unexpected greeting: {}",
-            reply.greeting
+            "module claims to serve `{}` rather than python",
+            descriptor.language
         ))
         .into());
     }
 
     println!(
-        "verified {archive} from {release_url} as TinyBus module `{}`",
-        info.name
+        "verified {archive} from {release_url} as TinyBus module `{}`, providing {} {}",
+        info.name, descriptor.display_name, descriptor.default_version
     );
     broker_task.abort();
     Ok(())

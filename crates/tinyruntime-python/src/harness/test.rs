@@ -28,7 +28,10 @@ fn output_is_unbuffered_by_both_the_flag_and_the_environment() {
             .contains(&("PYTHONUNBUFFERED".to_string(), "1".to_string()))
     );
     assert_eq!(
-        harness.command_args("/cache/pool_worker.py").last().map(String::as_str),
+        harness
+            .command_args("/cache/pool_worker.py")
+            .last()
+            .map(String::as_str),
         Some("/cache/pool_worker.py"),
         "the script must come after the flags"
     );
@@ -55,7 +58,10 @@ fn output_is_captured_at_the_file_descriptor_level() {
     // Swapping `sys.stdout` would miss `os.write(1, ...)`, subprocess output,
     // and anything a native extension writes — all of which would then land on
     // whatever the real descriptor points at.
-    assert!(SOURCE.contains("os.dup2("), "capture is not descriptor-level");
+    assert!(
+        SOURCE.contains("os.dup2("),
+        "capture is not descriptor-level"
+    );
     assert!(
         SOURCE.contains("tempfile.TemporaryFile"),
         "a pipe would deadlock on a job that outproduces its buffer"

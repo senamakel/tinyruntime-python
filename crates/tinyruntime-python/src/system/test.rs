@@ -59,7 +59,11 @@ async fn a_binary_that_does_not_understand_the_flag_is_not_an_interpreter() {
 
 #[tokio::test]
 async fn a_binary_that_is_not_there_is_not_probed_successfully() {
-    assert!(probe_version(Path::new("/nonexistent/python3")).await.is_none());
+    assert!(
+        probe_version(Path::new("/nonexistent/python3"))
+            .await
+            .is_none()
+    );
 }
 
 #[tokio::test]
