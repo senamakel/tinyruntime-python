@@ -4,9 +4,9 @@ This package contains the native `tinyruntime-python` module for TinyBus module
 ABI v1. Install only the archive matching the host operating system and
 architecture.
 
-The module claims `ai.tinyhumans.runtime.python.Provider`, serves the shared
+The module claims `ai.tinyhumans.runtime.python.Provider`, implements the shared
 provider interface `ai.tinyhumans.runtime.Provider` at
-`/ai/tinyhumans/runtime/Provider`, and provides `Describe`, `DetectSystem`,
+`/ai/tinyhumans/runtime/python/Provider`, and provides `Describe`, `DetectSystem`,
 `SelectDistribution`, `Layout`, and `Harness`. Every payload type and every name
 is published as the `tinyruntime-bus` crate, so a host names them from a library
 rather than by string literal.

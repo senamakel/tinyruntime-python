@@ -18,6 +18,10 @@ fn the_provider_serves_the_shared_interface_from_the_contract() {
         names::PROVIDER_INTERFACE,
         tinyruntime_python::PROVIDER_INTERFACE
     );
+    assert_eq!(
+        names::providers::PYTHON_OBJECT_PATH,
+        names::object_path_for(names::providers::PYTHON)
+    );
     assert_eq!(names::PROVIDER_METHODS.len(), 5);
     assert_eq!(Language::python().as_str(), PYTHON);
 }

@@ -29,7 +29,7 @@ async fn serving(bus: &MemoryBus) -> TinyBusResult<(Connection, tinybus::Proxy)>
     let client = Connection::connect(bus.connect().await?).await?;
     let proxy = client.proxy(
         names::providers::PYTHON,
-        names::PROVIDER_OBJECT_PATH,
+        names::providers::PYTHON_OBJECT_PATH,
         names::PROVIDER_INTERFACE,
     )?;
     Ok((module, proxy))
@@ -50,6 +50,17 @@ fn declared_methods_match_the_dispatch_table() {
         .collect::<Vec<_>>();
 
     assert_eq!(methods, names::PROVIDER_METHODS.to_vec());
+}
+
+#[test]
+fn the_object_path_is_the_one_the_manifest_will_declare() {
+    // `tinybus_module!` derives this module's manifest path from its bus name.
+    // Serving anywhere else ships a manifest that disagrees with the object
+    // actually exported, which no amount of in-process testing would catch.
+    assert_eq!(
+        names::providers::PYTHON_OBJECT_PATH,
+        names::object_path_for(names::providers::PYTHON)
+    );
 }
 
 #[test]

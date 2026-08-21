@@ -75,6 +75,6 @@ pub fn is_compatible_with_contract() -> bool {
 // very types the module serves rather than copies of them.
 pub use tinyruntime_bus::{
     ArchiveFormat, CONTRACT_VERSION, Distribution, Language, LayoutRequest, LayoutResponse,
-    PROVIDER_INTERFACE, PROVIDER_METHODS, PROVIDER_OBJECT_PATH, PYTHON, ProviderDescriptor,
-    RuntimeLayout, RuntimeSettings, WORKER_PROTOCOL_VERSION, WorkerHarness, names,
+    PROVIDER_INTERFACE, PROVIDER_METHODS, PYTHON, ProviderDescriptor, RuntimeLayout,
+    RuntimeSettings, WORKER_PROTOCOL_VERSION, WorkerHarness, names, object_path_for,
 };

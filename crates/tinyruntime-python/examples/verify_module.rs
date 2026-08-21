@@ -48,7 +48,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // it verifies the artifact rather than the machine it happens to run on.
     let proxy = client.proxy(
         names::providers::PYTHON,
-        names::PROVIDER_OBJECT_PATH,
+        names::providers::PYTHON_OBJECT_PATH,
         names::PROVIDER_INTERFACE,
     )?;
     let descriptor: ProviderDescriptor = proxy.call(names::provider_methods::DESCRIBE, ()).await?;
