@@ -213,3 +213,127 @@ fn this_machine_is_one_the_channel_publishes_for() {
         std::env::consts::ARCH
     );
 }
+
+// ---------------------------------------------------------------------------
+// Against a release index the test serves
+//
+// Reaching GitHub here would tie the suite to the network and to a release
+// staying published. A loopback server gives the same code path with neither.
+// ---------------------------------------------------------------------------
+
+use std::io::{BufRead, BufReader, Write};
+use std::net::TcpListener;
+
+use reqwest::Client;
+use tinyruntime_bus::RuntimeSettings;
+
+/// Serve one JSON body, recording the path that was requested.
+fn serve_index(body: String) -> (String, std::thread::JoinHandle<String>) {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("loopback is available");
+    let base = format!("http://{}", listener.local_addr().expect("an address"));
+
+    let handle = std::thread::spawn(move || {
+        let Ok((mut stream, _)) = listener.accept() else {
+            return String::new();
+        };
+        let Ok(clone) = stream.try_clone() else {
+            return String::new();
+        };
+        let mut reader = BufReader::new(clone);
+        let mut request_line = String::new();
+        let _ = reader.read_line(&mut request_line);
+        let mut line = String::new();
+        while reader.read_line(&mut line).unwrap_or(0) > 0 {
+            if line == "\r\n" {
+                break;
+            }
+            line.clear();
+        }
+        let response = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        );
+        let _ = stream.write_all(response.as_bytes());
+        let _ = stream.flush();
+        request_line
+    });
+
+    (base, handle)
+}
+
+/// A release body holding one build for this host.
+fn release_body_for_this_host() -> String {
+    let suffix = host_suffix().expect("this host is supported");
+    serde_json::json!({
+        "tag_name": "20240909",
+        "assets": [{
+            "name": format!("cpython-3.12.4+20240909-{suffix}"),
+            "browser_download_url": "https://example.invalid/cpython.tar.gz",
+            "digest": "sha256:abc"
+        }]
+    })
+    .to_string()
+}
+
+#[tokio::test]
+async fn a_build_is_selected_from_the_channels_current_release() {
+    let (base, server) = serve_index(release_body_for_this_host());
+
+    let chosen = super::select_from_api(&Client::new(), &base, &RuntimeSettings::new("3.12"))
+        .await
+        .expect("a build is selected");
+
+    assert_eq!(chosen.version, "3.12.4");
+    assert_eq!(chosen.expected_sha256.as_deref(), Some("abc"));
+    let requested = server.join().expect("the server finished");
+    assert!(
+        requested.contains("/latest"),
+        "an unpinned request should ask for the current release: {requested}"
+    );
+}
+
+#[tokio::test]
+async fn a_pinned_release_tag_is_requested_by_name() {
+    let (base, server) = serve_index(release_body_for_this_host());
+
+    let mut settings = RuntimeSettings::new("3.12");
+    settings.release_tag = "20240909".to_string();
+    super::select_from_api(&Client::new(), &base, &settings)
+        .await
+        .expect("a build is selected");
+
+    let requested = server.join().expect("the server finished");
+    assert!(
+        requested.contains("/tags/20240909"),
+        "a pinned tag was not requested: {requested}"
+    );
+}
+
+#[tokio::test]
+async fn an_index_that_is_not_the_expected_shape_is_reported_as_unreadable() {
+    let (base, server) = serve_index("{\"unexpected\": true}".to_string());
+
+    let error = super::select_from_api(&Client::new(), &base, &RuntimeSettings::new("3.12"))
+        .await
+        .expect_err("a body that is not a release cannot be read");
+    assert!(matches!(error, Error::IndexUnavailable(_)), "got {error:?}");
+    let _ = server.join();
+}
+
+#[tokio::test]
+async fn an_unreachable_channel_is_reported_without_the_url() {
+    // These messages reach a host's UI; a URL can carry a token.
+    let error = super::select_from_api(
+        &Client::new(),
+        "http://127.0.0.1:1",
+        &RuntimeSettings::new("3.12"),
+    )
+    .await
+    .expect_err("an unreachable channel fails");
+
+    let Error::IndexUnavailable(reason) = &error else {
+        panic!("got {error:?}");
+    };
+    assert!(!reason.contains("127.0.0.1"), "got `{reason}`");
+    assert!(reason.contains("connection"), "got `{reason}`");
+}

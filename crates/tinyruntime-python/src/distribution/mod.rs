@@ -37,8 +37,26 @@ const RELEASES_API: &str =
 /// Returns [`Error::IndexUnavailable`] when the release index cannot be read,
 /// and the selection errors from [`select_from`] otherwise.
 pub async fn select(client: &Client, settings: &RuntimeSettings) -> Result<Distribution> {
+    select_from_api(client, RELEASES_API, settings).await
+}
+
+/// [`select`] against a named release index.
+///
+/// Split out so the request, the tag handling, and the failure mapping can be
+/// tested against a server the test controls. Reaching GitHub from a unit test
+/// would tie the suite to the network and to a release staying published, which
+/// the repository's testing rules rule out.
+///
+/// # Errors
+///
+/// As [`select`].
+pub async fn select_from_api(
+    client: &Client,
+    releases_api: &str,
+    settings: &RuntimeSettings,
+) -> Result<Distribution> {
     let suffix = host_suffix()?;
-    let release = fetch_release(client, settings.release_tag()).await?;
+    let release = fetch_release(client, releases_api, settings.release_tag()).await?;
 
     let distribution = index::select(
         &release,
@@ -56,10 +74,14 @@ pub async fn select(client: &Client, settings: &RuntimeSettings) -> Result<Distr
 }
 
 /// Read one release from the channel, or its current one.
-async fn fetch_release(client: &Client, tag: Option<&str>) -> Result<index::Release> {
+async fn fetch_release(
+    client: &Client,
+    releases_api: &str,
+    tag: Option<&str>,
+) -> Result<index::Release> {
     let url = match tag {
-        Some(tag) => format!("{RELEASES_API}/tags/{tag}"),
-        None => format!("{RELEASES_API}/latest"),
+        Some(tag) => format!("{releases_api}/tags/{tag}"),
+        None => format!("{releases_api}/latest"),
     };
 
     client

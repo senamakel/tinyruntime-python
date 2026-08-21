@@ -4,6 +4,8 @@
 use std::fs;
 use std::path::Path;
 
+use tinyruntime_bus::RuntimeSettings;
+
 use super::{find_interpreter, from_parts};
 
 /// Build an unpacked standalone build with the named files in its bin directory.
@@ -84,4 +86,93 @@ fn an_install_without_pip_is_still_a_usable_layout() {
     let layout = from_parts(&bin, &bin.join("python3"), "3.12.4");
     assert!(layout.executable("python").is_some());
     assert!(layout.executable("pip").is_none());
+}
+
+#[test]
+fn the_windows_layout_is_checked_everywhere_rather_than_only_on_windows() {
+    // A standalone build on Windows has no `bin/` directory and ships
+    // `python.exe`. Neither is exercised by a `cfg!` branch on Linux.
+    let scratch = tempfile::tempdir().unwrap();
+    let root = scratch.path().join("python");
+    std::fs::create_dir_all(&root).unwrap();
+    std::fs::write(root.join("python.exe"), b"").unwrap();
+
+    let found = super::find_interpreter_for(scratch.path(), true)
+        .expect("the Windows interpreter is found");
+    assert!(
+        found.ends_with("python/python.exe"),
+        "found {}",
+        found.display()
+    );
+
+    assert!(
+        super::find_interpreter_for(scratch.path(), false).is_none(),
+        "the Unix search must not match a Windows layout"
+    );
+}
+
+#[test]
+fn the_package_installer_is_named_per_platform() {
+    assert_eq!(super::pip_names_for(true), vec!["pip.exe", "pip3.exe"]);
+    assert_eq!(super::pip_names_for(false), vec!["pip3", "pip"]);
+}
+
+/// Write an executable standing in for an interpreter, printing `version`.
+#[cfg(unix)]
+fn fake_python(bin: &Path, version: &str) {
+    use std::os::unix::fs::PermissionsExt;
+
+    let path = bin.join("python3");
+    fs::write(&path, format!("#!/bin/sh\necho '{version}'\n")).expect("the script writes");
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).expect("it is executable");
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn an_install_inside_the_requested_range_is_described() {
+    let scratch = tempfile::tempdir().unwrap();
+    let bin = fabricate(scratch.path(), &["pip3"]);
+    fake_python(&bin, "Python 3.12.4");
+
+    let layout = super::describe(scratch.path(), &RuntimeSettings::new("3.12"))
+        .await
+        .expect("a compatible install is described");
+
+    assert_eq!(layout.version, "3.12.4");
+    assert!(layout.executable("python").is_some());
+    assert!(layout.executable("pip").is_some());
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn an_install_outside_the_requested_range_is_not_described() {
+    // The router scans a cache that may hold several series; reporting one the
+    // caller excluded would run the wrong interpreter.
+    let scratch = tempfile::tempdir().unwrap();
+    let bin = fabricate(scratch.path(), &[]);
+    fake_python(&bin, "Python 3.11.9");
+
+    assert!(
+        super::describe(scratch.path(), &RuntimeSettings::new("3.12"))
+            .await
+            .is_none()
+    );
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn an_install_whose_interpreter_does_not_answer_is_not_described() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let scratch = tempfile::tempdir().unwrap();
+    let bin = fabricate(scratch.path(), &[]);
+    let path = bin.join("python3");
+    fs::write(&path, "#!/bin/sh\nexit 1\n").unwrap();
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
+
+    assert!(
+        super::describe(scratch.path(), &RuntimeSettings::new("3.12"))
+            .await
+            .is_none()
+    );
 }

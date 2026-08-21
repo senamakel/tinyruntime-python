@@ -72,13 +72,23 @@ pub fn from_parts(bin_dir: &Path, interpreter: &Path, version: &str) -> RuntimeL
 /// inside some package's test fixtures.
 #[must_use]
 pub fn find_interpreter(install_dir: &Path) -> Option<PathBuf> {
+    find_interpreter_for(install_dir, cfg!(windows))
+}
+
+/// [`find_interpreter`] with the platform stated explicitly.
+///
+/// The Windows shape is only correct by matching what the channel ships, and a
+/// `cfg!(windows)` branch is never executed on the machines that run this suite.
+/// Passing the platform in is what lets both shapes be checked everywhere.
+#[must_use]
+pub fn find_interpreter_for(install_dir: &Path, windows: bool) -> Option<PathBuf> {
     for root in [install_dir.join("python"), install_dir.to_path_buf()] {
-        let bin_dir = if cfg!(windows) {
+        let bin_dir = if windows {
             root.clone()
         } else {
             root.join("bin")
         };
-        for name in interpreter_names() {
+        for name in interpreter_names(windows) {
             let candidate = bin_dir.join(&name);
             if candidate.is_file() {
                 return Some(candidate);
@@ -93,9 +103,9 @@ pub fn find_interpreter(install_dir: &Path) -> Option<PathBuf> {
 /// The versioned names come first because a build may ship `python3.12` without
 /// the generic symlinks, and because on a host install `python` may well be a
 /// Python 2 left over from a previous decade.
-fn interpreter_names() -> Vec<String> {
+fn interpreter_names(windows: bool) -> Vec<String> {
     let mut names = Vec::new();
-    if cfg!(windows) {
+    if windows {
         names.push("python.exe".to_owned());
         return names;
     }
@@ -109,7 +119,12 @@ fn interpreter_names() -> Vec<String> {
 
 /// Package-installer filenames to try.
 fn pip_names() -> Vec<String> {
-    if cfg!(windows) {
+    pip_names_for(cfg!(windows))
+}
+
+/// [`pip_names`] with the platform stated explicitly.
+fn pip_names_for(windows: bool) -> Vec<String> {
+    if windows {
         vec!["pip.exe".to_owned(), "pip3.exe".to_owned()]
     } else {
         vec!["pip3".to_owned(), "pip".to_owned()]
