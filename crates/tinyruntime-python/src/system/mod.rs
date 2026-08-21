@@ -32,6 +32,19 @@ const PROBE_TIMEOUT: Duration = Duration::from_secs(5);
 /// Returns `None` when nothing suitable is installed, which is the signal for
 /// the router to install a managed build instead.
 pub async fn detect(settings: &RuntimeSettings) -> Option<RuntimeLayout> {
+    detect_in(settings, std::env::var_os("PATH").as_ref()).await
+}
+
+/// [`detect`] with the search path supplied explicitly.
+///
+/// Split out so a test can point the probe at a directory it controls. Rewriting
+/// the process environment is not an option — `unsafe` is forbidden
+/// workspace-wide, and a shared `PATH` would make concurrent tests interfere —
+/// and the candidate ordering here is the whole point of the module.
+pub async fn detect_in(
+    settings: &RuntimeSettings,
+    path_var: Option<&std::ffi::OsString>,
+) -> Option<RuntimeLayout> {
     let Some(minimum) = version::parse_version(&settings.version) else {
         tracing::warn!(
             "[tinyruntime-python] the minimum version is not a version; skipping host detection"
@@ -40,7 +53,7 @@ pub async fn detect(settings: &RuntimeSettings) -> Option<RuntimeLayout> {
     };
 
     for candidate in candidates(settings.preferred_command(), minimum) {
-        let Some(path) = locate(&candidate) else {
+        let Some(path) = locate(&candidate, path_var) else {
             continue;
         };
         let Some(reported) = probe_version(&path).await else {
@@ -93,26 +106,35 @@ fn candidates(preferred: Option<&str>, minimum: Version) -> Vec<String> {
 }
 
 /// Resolve a command to an executable file, searching `PATH` for a bare name.
-fn locate(command: &str) -> Option<PathBuf> {
+fn locate(command: &str, path_var: Option<&std::ffi::OsString>) -> Option<PathBuf> {
     let as_path = Path::new(command);
     if as_path.is_absolute() || as_path.components().count() > 1 {
         return is_executable(as_path).then(|| as_path.to_path_buf());
     }
 
-    let path_var = std::env::var_os("PATH")?;
-    for directory in std::env::split_paths(&path_var) {
+    let path_var = path_var?;
+    for directory in std::env::split_paths(path_var) {
         let candidate = directory.join(command);
         if is_executable(&candidate) {
             return Some(candidate);
         }
-        if cfg!(windows) {
-            let with_extension = directory.join(format!("{command}.exe"));
-            if is_executable(&with_extension) {
-                return Some(with_extension);
-            }
+        if let Some(found) = windows_executable(&directory, command, cfg!(windows)) {
+            return Some(found);
         }
     }
     None
+}
+
+/// The `.exe` a bare command names on Windows, if it is there.
+///
+/// The platform is a parameter rather than a `cfg!`, so the Windows lookup is
+/// exercised on the machines that actually run this suite.
+fn windows_executable(directory: &Path, command: &str, windows: bool) -> Option<PathBuf> {
+    if !windows {
+        return None;
+    }
+    let candidate = directory.join(format!("{command}.exe"));
+    is_executable(&candidate).then_some(candidate)
 }
 
 /// Whether `path` is a file this process could execute.

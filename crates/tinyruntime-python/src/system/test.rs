@@ -5,7 +5,7 @@ use std::path::Path;
 
 use tinyruntime_bus::RuntimeSettings;
 
-use super::{candidates, detect, locate, probe_version};
+use super::{candidates, detect, detect_in, locate, probe_version, windows_executable};
 use crate::version::parse_version;
 
 #[test]
@@ -37,15 +37,113 @@ fn the_series_name_follows_the_configured_floor() {
 
 #[test]
 fn an_absolute_command_that_is_not_there_does_not_resolve() {
-    assert!(locate("/nonexistent/path/to/python3").is_none());
+    assert!(locate("/nonexistent/path/to/python3", None).is_none());
 }
 
 #[cfg(unix)]
 #[test]
-fn a_bare_command_resolves_through_path() {
-    // `sh` is on PATH on every Unix host, so this exercises the lookup without
-    // depending on Python being installed.
-    assert!(locate("sh").is_some(), "PATH lookup found nothing at all");
+fn a_bare_command_resolves_through_the_search_path() {
+    let path = std::env::var_os("PATH").expect("a host has a PATH");
+    assert!(
+        locate("sh", Some(&path)).is_some(),
+        "PATH lookup found nothing at all"
+    );
+}
+
+#[test]
+fn a_bare_command_with_no_search_path_does_not_resolve() {
+    assert!(locate("python3", None).is_none());
+}
+
+#[test]
+fn the_windows_executable_lookup_is_checked_everywhere() {
+    let scratch = tempfile::tempdir().expect("scratch directory");
+    let named = scratch.path().join("python.exe");
+    std::fs::write(&named, b"binary").expect("the file writes");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&named, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+
+    assert_eq!(
+        windows_executable(scratch.path(), "python", true),
+        Some(named)
+    );
+    assert_eq!(
+        windows_executable(scratch.path(), "python", false),
+        None,
+        "the lookup must not fire off Windows"
+    );
+}
+
+/// Write an executable standing in for an interpreter, printing `version`.
+#[cfg(unix)]
+fn fake_python(directory: &Path, name: &str, version: &str) -> std::path::PathBuf {
+    use std::os::unix::fs::PermissionsExt;
+
+    let path = directory.join(name);
+    std::fs::write(&path, format!("#!/bin/sh\necho '{version}'\n")).expect("the script writes");
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))
+        .expect("the script is executable");
+    path
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn an_interpreter_inside_the_range_is_reused() {
+    let scratch = tempfile::tempdir().expect("scratch directory");
+    fake_python(scratch.path(), "python3", "Python 3.13.1");
+
+    let path = std::ffi::OsString::from(scratch.path());
+    let layout = detect_in(&RuntimeSettings::new("3.12"), Some(&path))
+        .await
+        .expect("a newer interpreter satisfies a floor");
+    assert_eq!(layout.version, "3.13.1");
+    assert!(layout.executable("python").is_some());
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn the_series_specific_name_is_preferred_over_the_generic_one() {
+    // On a machine with both, `python3` is often the older one.
+    let scratch = tempfile::tempdir().expect("scratch directory");
+    fake_python(scratch.path(), "python3", "Python 3.12.0");
+    fake_python(scratch.path(), "python3.14", "Python 3.14.1");
+
+    let path = std::ffi::OsString::from(scratch.path());
+    let layout = detect_in(&RuntimeSettings::new("3.14"), Some(&path))
+        .await
+        .expect("the versioned binary is found");
+    assert_eq!(layout.version, "3.14.1");
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn an_interpreter_below_the_floor_is_not_reused() {
+    let scratch = tempfile::tempdir().expect("scratch directory");
+    fake_python(scratch.path(), "python3", "Python 3.11.9");
+
+    let path = std::ffi::OsString::from(scratch.path());
+    assert!(
+        detect_in(&RuntimeSettings::new("3.12"), Some(&path))
+            .await
+            .is_none()
+    );
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn an_interpreter_that_prints_nothing_useful_is_skipped() {
+    let scratch = tempfile::tempdir().expect("scratch directory");
+    fake_python(scratch.path(), "python3", "not-a-version");
+
+    let path = std::ffi::OsString::from(scratch.path());
+    assert!(
+        detect_in(&RuntimeSettings::new("3.12"), Some(&path))
+            .await
+            .is_none()
+    );
 }
 
 #[cfg(unix)]
