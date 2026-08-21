@@ -18,11 +18,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // A request names a floor, so anything newer satisfies it.
     for candidate in ["3.11.9", "3.12.4", "3.13.1"] {
-        let parsed = parse_version(candidate).expect("a version");
-        let verdict = if satisfies(parsed, DEFAULT_VERSION, None) {
-            "reused"
-        } else {
-            "rejected"
+        let verdict = match parse_version(candidate) {
+            Some(parsed) if satisfies(parsed, DEFAULT_VERSION, None) => "reused",
+            Some(_) => "rejected",
+            None => "not a version",
         };
         println!("  a host {candidate} would be {verdict}");
     }
