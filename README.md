@@ -1,156 +1,93 @@
-# Rust Template
+# tinyruntime-python
 
-A production-ready Rust 2024 TinyBus module template used by TinyHumans AI. It
-ships the workspace layout, TinyBus ABI adapter, error handling, testing,
-documentation, CI, and multi-platform release workflow that every new
-integration in this organization starts from.
+The Python provider for [`tinyruntime`](https://github.com/tinyhumansai/tinyruntime).
 
-It is a two-crate cargo workspace. `crates/template-bus` is the wire contract —
-member names, payload types, and the contract version, with no transport and no
-behavior — and `crates/template` is the implementation, built as both an `rlib`
-and the `cdylib` TinyBus loads. A host that only makes calls depends on the
-contract crate alone and compiles neither the module nor `tinybus` itself.
+## What this is
 
-## Use This Template
+One half of a deliberate split.
 
-Choose **Use this template** on GitHub, create a repository, then work through
-the checklist at the top of [`AGENTS.md`](AGENTS.md):
+`tinyruntime` — the router — owns everything that is the same for every
+language: downloading an archive, verifying its digest, unpacking it, promoting
+it into a cache atomically, reusing it on the next start, and keeping a bounded
+set of warm interpreter processes in front of it.
 
-- rename the `crates/template` and `crates/template-bus` directories and the
-  `name` fields in their manifests, and set the shared `description`,
-  `repository`, `keywords`, and `categories`;
-- update this README and the crate documentation in `crates/template/src/lib.rs`;
-- replace the placeholder `greeting` module with the first real feature area, in
-  both crates: the payload types in the contract, the behavior in the module;
-- rename the TinyBus interface, object path, and member constants in
-  `crates/template-bus/src/names/`, and the matching `provides` / `methods`
-  declarations in `crates/template/src/tinybus_module/`;
-- update the security contact and repository links in the community files;
-- replace `ROADMAP.md` with the real plan, or delete it;
-- change the license if GPL-3.0-only is not appropriate.
+This module owns everything that is true only of Python. It answers five
+questions and does nothing else:
 
-Search for `template` and `template_bus` to find every remaining
-template-specific value.
-
-## What You Get
-
-| Area | What is configured |
+| Member | What it answers |
 | --- | --- |
-| Layout | A cargo workspace under `crates/`, split into a dependency-light wire contract and the module that implements it; directory modules with `mod.rs` / `types.rs` / `test.rs`, a crate-wide error type, integration tests, and a runnable example |
-| Lints | `unsafe_code` forbidden, `missing_docs`, clippy `all` + `pedantic`, no `unwrap`/`expect`/`panic`/`todo` in library code — all declared once in `[workspace.lints]` so every crate, local run, and CI run agree |
-| CI | Format, clippy, build, test (default and all features), a run of the bundled example, an assertion that the contract crate stays transport-free, at least 90% line coverage in every source file, rustdoc with `-D warnings`, an MSRV build, and a `cargo-deny` supply-chain check |
-| Release | Manual `workflow_dispatch` bump that validates, versions, tags, and creates installable native module packages for every supported platform |
-| Community | Issue and pull request templates, Dependabot, contributing, security, support, and code of conduct docs |
-| Agents | [`AGENTS.md`](AGENTS.md) as the single source of truth, symlinked as `CLAUDE.md`, plus a `.claude/settings.json` allowlist for the standard commands |
-| Vendor | TinyBus host types and module SDK pinned as the `vendor/tinybus` build-time submodule |
+| `Describe` | what this provider is and what it targets by default |
+| `DetectSystem` | whether the host already has a usable interpreter |
+| `SelectDistribution` | which standalone build to install for this machine |
+| `Layout` | where the interpreter is inside an unpacked install |
+| `Harness` | what a warm Python worker is |
 
-## Layout
+It downloads nothing, installs nothing, and starts no worker. Every answer it
+gives is a description the router acts on.
 
-```text
-Cargo.toml              # virtual workspace: members, shared metadata, lints
-crates/
-├── template-bus/       # the wire contract — what crosses the bus
-│   ├── README.md       # why the contract is its own crate
-│   └── src/
-│       ├── lib.rs      # crate docs + the entire public re-export surface
-│       ├── names/      # interface, object path, one constant per member
-│       ├── greeting/   # payload types, one directory per family
-│       │   ├── mod.rs
-│       │   ├── types.rs
-│       │   └── test.rs
-│       └── version/    # contract version and the host bind rule
-└── template/           # the module — behavior, adapter, and the cdylib
-    ├── src/
-    │   ├── lib.rs      # crate docs + public surface, re-exporting the contract
-    │   ├── error/      # crate-wide `Error` and `Result<T>`
-    │   ├── greeting/   # one directory per feature area
-    │   └── tinybus_module/   # bus interface, setup, and ABI v1 exports
-    ├── tests/
-    │   └── public_api.rs     # integration tests against the public API only
-    └── examples/
-        ├── basic.rs                  # ordinary library API usage
-        ├── verify_module.rs          # local dynamic-module verification
-        └── verify_github_release.rs  # tagged-release download and bus call
-vendor/
-└── tinybus/            # pinned TinyBus git submodule
-docs/
-├── README.md           # documentation index and conventions
-├── specs/              # behavior and architecture specifications
-├── plans/              # implementation-ordered delivery plans
-└── adr/                # immutable architecture decision records
+## The Python knowledge, in four parts
+
+**A request names a floor, not a version.** `3.12` means "3.12 or newer". That
+follows from the channel: `astral-sh/python-build-standalone` publishes a moving
+set of builds rather than one archive per version, so an exact pin would stop
+resolving the moment that build rotated out. A caller that needs to stay off a
+newer series sets an exclusive ceiling — which is what keeps selection away from
+a 3.15 release candidate sitting in the same index as the 3.12 builds it wants.
+
+**`python3.12` is tried before `python3`.** On a machine with several
+interpreters installed, `python3` is whatever the distribution decided, and it is
+often older than the versioned binary sitting right next to it.
+
+**Every build unpacks into a directory called `python`.** Whatever the version.
+So the install directory in the cache is named from the asset rather than from
+the archive's contents — otherwise every version would claim the same directory
+and each install would silently replace the last.
+
+**A pooled job cannot be isolated, and the module says so.** There is no worker
+thread to run it in and no safe way to kill one, so jobs on a warm worker share
+module state, `os.environ`, and logging configuration. The harness gives each job
+fresh globals, captures output at the file-descriptor level — so `os.write(1,
+...)`, subprocesses, and native extensions are captured too — and enforces a soft
+deadline with `SIGALRM` on Unix. The router recycles workers after a job budget,
+which bounds the leakage without eliminating it. That is why a host opts into
+Python pooling rather than getting it by default.
+
+## Using it
+
+Load it alongside `tinyruntime`, which routes `python` to the well-known name
+this module claims (`ai.tinyhumans.runtime.python.Provider`). A host then asks
+the router to run Python and never addresses this module directly.
+
+```rust
+use tinyruntime_python::{DEFAULT_VERSION, parse_version, satisfies};
+
+let installed = parse_version("Python 3.13.1").expect("a version");
+assert!(satisfies(installed, DEFAULT_VERSION, None));
+assert!(!satisfies(installed, DEFAULT_VERSION, Some("3.13")));
 ```
 
-The split is the point. A payload type describes what a frame carries; the
-behavior that answers it is a different obligation. `template` depends on
-`template-bus` and re-exports all of it, so `template::GreetRequest` and
-`template_bus::GreetRequest` are the *same* type rather than structural twins,
-and a host is never forced to choose between linking the whole module and
-redefining the vocabulary. See
-[`crates/template-bus/README.md`](crates/template-bus/README.md).
+## Supported hosts
 
-Within each crate, feature areas use directory modules: implementation and
-exports live in `mod.rs`, substantial types move to `types.rs`, and unit tests
-live in `test.rs`. [`AGENTS.md`](AGENTS.md) holds the complete repository
-guidance, and `CLAUDE.md` is a symlink to it so every coding agent reads one
-source of truth.
+Whatever the standalone channel publishes: macOS, Linux, and Windows on x86-64
+and ARM64. Anything else is refused by name rather than guessed at.
 
-## Development
-
-Clone with submodules, or initialize them before building:
+## Building
 
 ```sh
 git submodule update --init --recursive
-```
-
-```sh
 cargo fmt --all -- --check
 cargo clippy --all-targets --all-features -- -D warnings
 cargo build --all-targets --all-features
 cargo test --all-features
-cargo run -p template --example basic
-cargo build -p template --release --lib   # produces the installable cdylib
 ```
 
-Those four checks are exactly what CI runs. Optional extras:
+The harness suite in `tests/harness_protocol.rs` launches a real `python` and
+drives the protocol end to end. It skips when the machine has none, so the suite
+stays hermetic on a runner without Python.
 
-```sh
-cargo doc --no-deps --all-features   # CI builds this with RUSTDOCFLAGS="-D warnings"
-cargo deny check all                 # supply-chain check; see deny.toml
-cargo install cargo-llvm-cov         # once, before running the coverage gate
-.github/scripts/check-file-coverage.sh 90 coverage.json
-```
-
-## Releasing
-
-Run the **Release** workflow from the Actions tab with a `patch`, `minor`, or
-`major` bump. Use `current` only to resume an interrupted release whose version
-commit and tag already exist. The workflow revalidates the workspace, versions
-and tags it — one `[workspace.package]` version that every member inherits —
-builds `crates/template` as a TinyBus `cdylib`, and creates a GitHub release.
-Assets follow `template-<version>-<platform>.<tar.gz|zip>` and contain the
-native module, its SHA-256 `modules.toml`, license, and
-[`MODULE.md`](MODULE.md). Every release also publishes `checksum.toml`, which
-TinyBus uses to verify an archive before extraction. The workflow loads the
-published Ubuntu archive through TinyBus's GitHub release API and calls its
-`Greet` method before declaring the release successful. TinyBus itself is not
-shipped by this repository; the pinned submodule is the build-time SDK. The stable native
-matrix covers Ubuntu 22.04 and 24.04 on x86_64 and ARM64; Fedora 43 and 44 on
-x86_64 and ARM64; rolling Arch Linux on its officially supported x86_64
-architecture; macOS 15 and 26 on Intel and Apple Silicon; Windows Server 2022
-and 2025 on x86_64; and Windows 11 on ARM64. Preview, deprecated, and unofficial
-architecture images are not release gates. Do not hand-edit the version in the
-root `Cargo.toml`.
-
-## Documentation
-
-- [`AGENTS.md`](AGENTS.md) — repository guidelines for humans and agents
-- [`CONTRIBUTING.md`](CONTRIBUTING.md) — how to propose a change
-- [`docs/specs/`](docs/specs/README.md) — behavior and architecture specs
-- [`docs/plans/`](docs/plans/README.md) — test-first implementation plans
-- [`docs/adr/`](docs/adr/0001-record-architecture-decisions.md) — architecture
-  decision records
-- [`SECURITY.md`](SECURITY.md) — how to report a vulnerability
+See [`AGENTS.md`](AGENTS.md) for the working agreement, and
+[`MODULE.md`](MODULE.md) for installing a release artifact.
 
 ## License
 
-GPL-3.0-only. See [LICENSE](LICENSE).
+GPL-3.0-only. See [`LICENSE`](LICENSE).
