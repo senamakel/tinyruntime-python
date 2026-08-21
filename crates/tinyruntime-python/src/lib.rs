@@ -16,7 +16,7 @@
 //!   inside the requested range, and why a stripped build wins a tie.
 //! - [`layout`] — that a standalone build hides its interpreter under `python/`,
 //!   whatever version it is.
-//! - [`harness`] — what a warm Python worker is, and the two things it cannot
+//! - [`harness`](mod@harness) — what a warm Python worker is, and the two things it cannot
 //!   promise that the Node one can.
 //!
 //! It downloads nothing, installs nothing, and starts no worker. Every answer it

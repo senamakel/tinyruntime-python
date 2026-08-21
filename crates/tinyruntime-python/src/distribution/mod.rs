@@ -6,7 +6,7 @@
 //!
 //! First, selection is a search rather than a lookup: the index has to be read,
 //! filtered to this host, filtered to the requested version range, and then
-//! ranked. That is what [`index`] does, and it is deliberately separable from the
+//! ranked. That is what the private `index` submodule does, and it is deliberately separable from the
 //! network so it can be tested against a real index body.
 //!
 //! Second, every build unpacks into a directory called `python`, regardless of
@@ -35,7 +35,7 @@ const RELEASES_API: &str =
 /// # Errors
 ///
 /// Returns [`Error::IndexUnavailable`] when the release index cannot be read,
-/// and the selection errors from [`index::select`] otherwise.
+/// and the selection errors from [`select_from`] otherwise.
 pub async fn select(client: &Client, settings: &RuntimeSettings) -> Result<Distribution> {
     let suffix = host_suffix()?;
     let release = fetch_release(client, settings.release_tag()).await?;
