@@ -2,3 +2,6 @@
 	path = vendor/tinybus
 	url = https://github.com/tinyhumansai/tinybus
 	branch = main
+[submodule "vendor/tinyruntime"]
+	path = vendor/tinyruntime
+	url = https://github.com/tinyhumansai/tinyruntime

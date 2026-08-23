@@ -1,0 +1,201 @@
+//! Unit tests for host interpreter detection.
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
+use std::path::Path;
+
+use tinyruntime_bus::RuntimeSettings;
+
+use super::{candidates, detect, detect_in, locate, probe_version, windows_executable};
+use crate::version::parse_version;
+
+#[test]
+fn the_series_specific_name_is_tried_before_the_generic_one() {
+    // On a machine with several interpreters, `python3` is whatever the
+    // distribution chose and is often older than the versioned binary next to it.
+    let ordered = candidates(None, parse_version("3.12").unwrap());
+    assert_eq!(ordered, vec!["python3.12", "python3", "python"]);
+}
+
+#[test]
+fn a_preferred_command_is_tried_first() {
+    let ordered = candidates(Some("/opt/py/bin/python3"), parse_version("3.12").unwrap());
+    assert_eq!(ordered[0], "/opt/py/bin/python3");
+    assert_eq!(ordered[1], "python3.12");
+}
+
+#[test]
+fn a_preferred_command_that_is_already_a_fallback_is_not_repeated() {
+    let ordered = candidates(Some("python3"), parse_version("3.12").unwrap());
+    assert_eq!(ordered, vec!["python3", "python3.12", "python"]);
+}
+
+#[test]
+fn the_series_name_follows_the_configured_floor() {
+    let ordered = candidates(None, parse_version("3.14").unwrap());
+    assert_eq!(ordered[0], "python3.14");
+}
+
+#[test]
+fn an_absolute_command_that_is_not_there_does_not_resolve() {
+    assert!(locate("/nonexistent/path/to/python3", None).is_none());
+}
+
+#[cfg(unix)]
+#[test]
+fn a_bare_command_resolves_through_the_search_path() {
+    let path = std::env::var_os("PATH").expect("a host has a PATH");
+    assert!(
+        locate("sh", Some(&path)).is_some(),
+        "PATH lookup found nothing at all"
+    );
+}
+
+#[test]
+fn a_bare_command_with_no_search_path_does_not_resolve() {
+    assert!(locate("python3", None).is_none());
+}
+
+#[test]
+fn the_windows_executable_lookup_is_checked_everywhere() {
+    let scratch = tempfile::tempdir().expect("scratch directory");
+    let named = scratch.path().join("python.exe");
+    std::fs::write(&named, b"binary").expect("the file writes");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&named, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+
+    assert_eq!(
+        windows_executable(scratch.path(), "python", true),
+        Some(named)
+    );
+    assert_eq!(
+        windows_executable(scratch.path(), "python", false),
+        None,
+        "the lookup must not fire off Windows"
+    );
+}
+
+/// Write an executable standing in for an interpreter, printing `version`.
+///
+/// Waits until the script actually runs before returning. A file written and
+/// immediately executed can transiently fail — the kernel may still see a writer
+/// on it — and a failed probe is reported as "no interpreter", which would
+/// surface as a confusing assertion failure rather than as the flake it is.
+#[cfg(unix)]
+fn fake_python(directory: &Path, name: &str, version: &str) -> std::path::PathBuf {
+    use std::os::unix::fs::PermissionsExt;
+
+    let path = directory.join(name);
+    std::fs::write(&path, format!("#!/bin/sh\necho '{version}'\n")).expect("the script writes");
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))
+        .expect("the script is executable");
+
+    for _ in 0..50 {
+        if std::process::Command::new(&path)
+            .arg("--version")
+            .output()
+            .is_ok_and(|out| out.status.success())
+        {
+            return path;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    panic!(
+        "the fake interpreter at {} never became runnable",
+        path.display()
+    );
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn an_interpreter_inside_the_range_is_reused() {
+    let scratch = tempfile::tempdir().expect("scratch directory");
+    fake_python(scratch.path(), "python3", "Python 3.13.1");
+
+    let path = std::ffi::OsString::from(scratch.path());
+    let layout = detect_in(&RuntimeSettings::new("3.12"), Some(&path))
+        .await
+        .expect("a newer interpreter satisfies a floor");
+    assert_eq!(layout.version, "3.13.1");
+    assert!(layout.executable("python").is_some());
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn the_series_specific_name_is_preferred_over_the_generic_one() {
+    // On a machine with both, `python3` is often the older one.
+    let scratch = tempfile::tempdir().expect("scratch directory");
+    fake_python(scratch.path(), "python3", "Python 3.12.0");
+    fake_python(scratch.path(), "python3.14", "Python 3.14.1");
+
+    let path = std::ffi::OsString::from(scratch.path());
+    let layout = detect_in(&RuntimeSettings::new("3.14"), Some(&path))
+        .await
+        .expect("the versioned binary is found");
+    assert_eq!(layout.version, "3.14.1");
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn an_interpreter_below_the_floor_is_not_reused() {
+    let scratch = tempfile::tempdir().expect("scratch directory");
+    fake_python(scratch.path(), "python3", "Python 3.11.9");
+
+    let path = std::ffi::OsString::from(scratch.path());
+    assert!(
+        detect_in(&RuntimeSettings::new("3.12"), Some(&path))
+            .await
+            .is_none()
+    );
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn an_interpreter_that_prints_nothing_useful_is_skipped() {
+    let scratch = tempfile::tempdir().expect("scratch directory");
+    fake_python(scratch.path(), "python3", "not-a-version");
+
+    let path = std::ffi::OsString::from(scratch.path());
+    assert!(
+        detect_in(&RuntimeSettings::new("3.12"), Some(&path))
+            .await
+            .is_none()
+    );
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn a_binary_that_does_not_understand_the_flag_is_not_an_interpreter() {
+    if !Path::new("/bin/false").exists() {
+        return;
+    }
+    assert!(probe_version(Path::new("/bin/false")).await.is_none());
+}
+
+#[tokio::test]
+async fn a_binary_that_is_not_there_is_not_probed_successfully() {
+    assert!(
+        probe_version(Path::new("/nonexistent/python3"))
+            .await
+            .is_none()
+    );
+}
+
+#[tokio::test]
+async fn an_unparseable_floor_detects_nothing() {
+    assert!(detect(&RuntimeSettings::new("latest")).await.is_none());
+}
+
+#[tokio::test]
+async fn a_ceiling_below_everything_installed_detects_nothing() {
+    // Even on a machine with Python, a range nothing satisfies must come back
+    // empty rather than handing over an interpreter outside it.
+    let mut settings = RuntimeSettings::new("3.0");
+    settings.maximum_version = "3.1".to_string();
+    assert!(
+        detect(&settings).await.is_none(),
+        "an interpreter outside the requested range was accepted"
+    );
+}

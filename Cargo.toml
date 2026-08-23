@@ -22,15 +22,14 @@ version = "0.2.1"
 edition = "2024"
 rust-version = "1.88"
 license = "GPL-3.0-only"
-repository = "https://github.com/tinyhumansai/rust-template"
+repository = "https://github.com/tinyhumansai/tinyruntime-python"
 
 [workspace.dependencies]
-# The wire contract. `crates/template` depends on it and re-exports it, so a
-# host that only makes calls takes this crate alone.
-# No `version` requirement on purpose: the workspace version moves on every
-# release, and a pinned requirement here would stop resolving the moment it did.
-# Nothing in this workspace is published, so the path is the whole address.
-template-bus = { path = "crates/template-bus" }
+# The wire contract this module implements the provider half of. It is vendored
+# rather than defined here on purpose: the router and every provider must agree
+# on one definition of these types, and a second copy would be a conversion at
+# every call site that nothing checks.
+tinyruntime-bus = { path = "vendor/tinyruntime/crates/tinyruntime-bus" }
 # TinyBus defines the message types, interface macro, and frozen module ABI
 # used by the generated integration. Socket and CLI features are unnecessary
 # here.
@@ -49,8 +48,26 @@ thiserror = "2"
 serde = { version = "1", features = ["derive"] }
 # Positional argument arrays and the module configuration blob.
 serde_json = "1"
-# Module integration tests exercise the real asynchronous in-memory TinyBus.
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
+# Reading the release index this provider selects a distribution from, and
+# probing a host interpreter's version without blocking the bus.
+tokio = { version = "1", features = [
+    "macros",
+    "rt-multi-thread",
+    "time",
+    "process",
+    "fs",
+] }
+# Reading the python-build-standalone release index, which is JSON over HTTPS.
+# `rustls` rather than the platform TLS stack so the module has no native TLS
+# build dependency.
+reqwest = { version = "0.12", default-features = false, features = [
+    "rustls-tls",
+    "json",
+] }
+# Diagnostics, through the same facade tinybus itself uses.
+tracing = "0.1"
+# Scratch directories for the tests that probe a fabricated install tree.
+tempfile = "3"
 
 # Lints apply to every member that opts in with `[lints] workspace = true`, and
 # to every target of that member. CI runs clippy with `-D warnings`, so anything

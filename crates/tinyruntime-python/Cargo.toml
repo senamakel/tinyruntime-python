@@ -1,0 +1,44 @@
+[package]
+name = "tinyruntime-python"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "The Python runtime provider for tinyruntime: which interpreter counts, which standalone build to install, and how to run a warm worker."
+documentation = "https://docs.rs/tinyruntime-python"
+readme = "../../README.md"
+keywords = ["tinybus", "runtime", "python", "provider"]
+categories = ["development-tools"]
+publish = false
+
+[lib]
+# Keep the ordinary Rust library for tests and downstream reuse while also
+# producing the native module artifact that TinyBus loads at runtime.
+crate-type = ["rlib", "cdylib"]
+
+[dependencies]
+# The wire contract: member names, payload types, and the contract version.
+# Re-exported wholesale from `src/lib.rs` so a consumer takes one dependency
+# rather than two, and so `template::GreetRequest` and
+# `template_bus::GreetRequest` are the same type.
+tinyruntime-bus = { workspace = true }
+tinybus = { workspace = true }
+tinybus-module = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+reqwest = { workspace = true }
+tracing = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+# The layout tests probe a fabricated install tree in a scratch directory, and
+# the harness tests launch a real `python` against a loopback listener.
+tempfile = { workspace = true }
+
+[features]
+default = []
+
+[lints]
+workspace = true
