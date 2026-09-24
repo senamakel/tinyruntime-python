@@ -143,7 +143,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: Build with the declared MSRV
-        run: cargo build --all-targets --all-features
+        env:
+          MSRV: ${{ steps.msrv.outputs.version }}
+        run: cargo +"$MSRV" build --all-targets --all-features
 
   supply-chain:
     name: Supply chain
@@ -156,5 +158,7 @@ jobs:
 
       - name: Check advisories, licenses, bans, and sources
         uses: EmbarkStudios/cargo-deny-action@v2
+        env:
+          RUSTUP_TOOLCHAIN: stable
         with:
           command: check all
