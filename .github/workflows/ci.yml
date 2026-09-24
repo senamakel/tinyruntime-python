@@ -156,5 +156,7 @@ jobs:
 
       - name: Check advisories, licenses, bans, and sources
         uses: EmbarkStudios/cargo-deny-action@v2
+        env:
+          RUSTUP_TOOLCHAIN: stable
         with:
           command: check all
