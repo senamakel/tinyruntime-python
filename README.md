@@ -74,10 +74,10 @@ and ARM64. Anything else is refused by name rather than guessed at.
 ## Linking into a host
 
 The default build exports the TinyBus C ABI for dynamic loading. The pinned
-TinyBus gitlink (11a7d0d, merged PR #28) supplies `module_export_static!`. To link the
-module into a Rust host, enable its `static-link` feature and pass the three
-`linked` entries (`TINYBUS_MODULE_ABI_V1`, `tinybus_module_manifest_v1`, and
-`tinybus_module_init_v1`) to the TinyBus linked-module host API. This uses the
+TinyBus gitlink (433d9ed, PR #29) supplies `module_export_static!` and its
+`linked_module()` helper. To link the module into a Rust host, enable its
+`static-link` feature (or the `linked` alias) and pass the public
+`linked_module()` result to the TinyBus linked-module host API. This uses the
 same declaration and manifest as the dynamic build, with Rust-addressable
 symbols that can coexist with other linked modules.
 
