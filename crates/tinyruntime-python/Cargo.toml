@@ -39,6 +39,7 @@ tempfile = { workspace = true }
 
 [features]
 default = []
+linked = ["tinybus/linked"]
 
 [lints]
 workspace = true

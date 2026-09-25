@@ -58,6 +58,8 @@ mod tinybus_module;
 pub use error::{Error, Result};
 pub use harness::harness;
 pub use tinybus_module::DEFAULT_VERSION;
+#[cfg(feature = "linked")]
+pub use tinybus_module::linked_module;
 pub use version::{Version, parse_version, satisfies};
 
 /// Whether this provider's contract version can bind to the one it was built
