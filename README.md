@@ -73,6 +73,10 @@ and ARM64. Anything else is refused by name rather than guessed at.
 
 ## Building
 
+The default build exports the TinyBus dynamic module ABI. Enable `static-link`
+to use the public `linked_module()` helper in a host executable. The `linked`
+feature is an alias for hosts that already use that name.
+
 ```sh
 git submodule update --init --recursive
 cargo fmt --all -- --check

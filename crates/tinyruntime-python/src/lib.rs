@@ -58,7 +58,7 @@ mod tinybus_module;
 pub use error::{Error, Result};
 pub use harness::harness;
 pub use tinybus_module::DEFAULT_VERSION;
-#[cfg(feature = "linked")]
+#[cfg(feature = "static-link")]
 pub use tinybus_module::linked_module;
 pub use version::{Version, parse_version, satisfies};
 

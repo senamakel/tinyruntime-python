@@ -95,7 +95,7 @@ async fn setup(connection: Connection) -> TinyBusResult<()> {
     Ok(())
 }
 
-tinybus_module::module_export! {
+tinybus_module::module_export_optional_static! {
     setup = setup,
     worker_threads = 1,
     provides = ["ai.tinyhumans.runtime.python.Provider"],
