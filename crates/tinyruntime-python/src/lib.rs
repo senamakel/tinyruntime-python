@@ -55,6 +55,14 @@ pub mod version;
 
 mod tinybus_module;
 
+/// Entry points for hosts that link this module into their executable.
+#[cfg(feature = "static-link")]
+pub mod linked {
+    pub use crate::tinybus_module::exports::{
+        TINYBUS_MODULE_ABI_V1, tinybus_module_init_v1, tinybus_module_manifest_v1,
+    };
+}
+
 pub use error::{Error, Result};
 pub use harness::harness;
 pub use tinybus_module::DEFAULT_VERSION;
