@@ -24,22 +24,27 @@ rust-version = "1.88"
 license = "GPL-3.0-only"
 repository = "https://github.com/tinyhumansai/tinyruntime-python"
 
+[patch.crates-io]
+tinyruntime-bus = { path = "vendor/tinyruntime/crates/tinyruntime-bus" }
+tinybus = { path = "vendor/tinybus/crates/tinybus" }
+tinybus-module = { path = "vendor/tinybus/crates/tinybus-module" }
+
 [workspace.dependencies]
 # The wire contract this module implements the provider half of. It is vendored
 # rather than defined here on purpose: the router and every provider must agree
 # on one definition of these types, and a second copy would be a conversion at
 # every call site that nothing checks.
-tinyruntime-bus = { path = "vendor/tinyruntime/crates/tinyruntime-bus" }
+tinyruntime-bus = "0.2"
 # TinyBus defines the message types, interface macro, and frozen module ABI
 # used by the generated integration. Socket and CLI features are unnecessary
 # here.
-tinybus = { path = "vendor/tinybus/crates/tinybus", version = "0.1.0", default-features = false, features = [
+tinybus = { version = "=0.1.2", default-features = false, features = [
     "macros",
     "modules",
 ] }
 # The module-side SDK owns the isolated runtime and exports the ABI entrypoints
 # required by TinyBus's dynamic loader.
-tinybus-module = { path = "vendor/tinybus/crates/tinybus-module", version = "0.1.0" }
+tinybus-module = "=0.1.2"
 # Derive macros for the crate-wide error type in `crates/template/src/error/`.
 # Every dependency entry should carry a comment like this one saying why it is
 # here.
